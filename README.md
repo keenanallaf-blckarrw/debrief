@@ -6,7 +6,8 @@ Debrief reads your trade history export (TradingView, Tradovate, or most broker 
 
 Built and beta-tested on real trade data (100+ trade sample sets across futures and forex) while actively trading NQ micros and gold micros.
 
-**[Live demo →][https://claude.ai/public/artifacts/18c5771d-2932-4af3-a28c-a30c33ddfe83](https://claude.ai/public/artifacts/ec8604c5-a227-4e52-ab2b-b719896d21bf)**
+**[Live demo →](https://keenanallaf-blckarrw.github.io/debrief/)** — runs in demo mode: CSV import, column mapping and parsing all work in the browser; the AI review needs a backend to hold the API key (see [Deploying](#deploying)).
+
 ---
 
 ## What it does
@@ -28,7 +29,7 @@ Early beta. Currently distributed as an interactive prototype for direct feedbac
 
 ## Stack
 
-React · Papaparse (deterministic CSV parsing) · Anthropic API (Claude) for review generation and web-search-backed market context.
+React (Vite) · Papaparse (deterministic CSV parsing) · Anthropic API (Claude) for review generation and web-search-backed market context, called through a key-holding proxy rather than from the browser.
 
 ## Roadmap
 
@@ -39,7 +40,7 @@ React · Papaparse (deterministic CSV parsing) · Anthropic API (Claude) for rev
 
 ---
 
-Built by [Keenan](https://github.com/) — finance & entrepreneurship, Babson College.
+Built by [Keenan](https://github.com/keenanallaf-blckarrw) — finance & entrepreneurship, Babson College.
 
 ---
 
@@ -69,3 +70,11 @@ public key. So the API calls in `src/api.js` go to a proxy you control rather th
 
 Without it the app deploys in demo mode: CSV import, column mapping, and trade parsing all work
 locally, and the AI review reports itself as unavailable instead of failing silently.
+
+### Premium unlock code
+
+`src/config.js` reads the beta unlock code from `VITE_PREMIUM_CODE` rather than hardcoding it,
+so the real code stays out of git. Set it as a repository variable alongside `API_BASE`.
+
+Treat it as a convenience gate, not a security boundary — anything shipped to the browser can be
+read from devtools by anyone who looks. The check belongs on the server once there is one.
