@@ -40,3 +40,32 @@ React · Papaparse (deterministic CSV parsing) · Anthropic API (Claude) for rev
 ---
 
 Built by [Keenan](https://github.com/) — finance & entrepreneurship, Babson College.
+
+---
+
+## Running it locally
+
+```bash
+npm install
+npm run dev
+```
+
+## Deploying
+
+A GitHub Actions workflow (`.github/workflows/deploy.yml`) builds the app and publishes it to
+GitHub Pages on every push to `main`. Enable it once under **Settings → Pages → Source: GitHub
+Actions**.
+
+### Turning the AI features on
+
+The app calls the Anthropic API, which requires a key — and a key shipped to the browser is a
+public key. So the API calls in `src/api.js` go to a proxy you control rather than straight to
+`api.anthropic.com`:
+
+1. Deploy a small proxy (a Cloudflare Worker or Vercel function is enough) that holds
+   `ANTHROPIC_API_KEY` and forwards `POST /v1/messages` to the Anthropic API.
+2. Add its origin as a repository variable named `API_BASE`
+   (**Settings → Secrets and variables → Actions → Variables**).
+
+Without it the app deploys in demo mode: CSV import, column mapping, and trade parsing all work
+locally, and the AI review reports itself as unavailable instead of failing silently.

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Papa from "papaparse";
+import { callClaude, callClaudeBlocks, callClaudeHistory, aiEnabled, AIUnavailableError } from "./api.js";
 
 // Beta premium unlock code — change this before sharing, and hand it only to premium testers.
 const PREMIUM_CODE = "DEBRIEF-EARLY";
@@ -84,43 +85,6 @@ const STRATEGIES = [
 const MARKETS = ["Futures", "Forex", "Stocks", "Crypto", "Options"];
 const EMOTIONS = ["Calm", "Confident", "FOMO", "Revenge", "Anxious", "Bored", "Tilted"];
 
-// ---------------- API helper ----------------
-async function callClaude(prompt, useSearch = false) {
-  const body = {
-    model: "claude-sonnet-4-6",
-    max_tokens: 1000,
-    messages: [{ role: "user", content: prompt }],
-  };
-  if (useSearch) body.tools = [{ type: "web_search_20250305", name: "web_search" }];
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  return (data.content || [])
-    .map((b) => (b.type === "text" ? b.text : ""))
-    .filter(Boolean)
-    .join("\n");
-}
-
-async function callClaudeBlocks(contentBlocks) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: contentBlocks }],
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message || "API error");
-  return (data.content || [])
-    .map((b) => (b.type === "text" ? b.text : ""))
-    .filter(Boolean)
-    .join("\n");
-}
 
 // Convert a broker timestamp to a sortable string key without relying on the browser's
 // Date parser (Safari rejects "MM/DD/YYYY HH:MM:SS", which silently broke direction detection).
@@ -437,17 +401,10 @@ Sample of their trades: ${JSON.stringify(trades.filter((t) => t.synced).slice(0,
     try {
       const history = nextMsgs.map((m) => ({ role: m.role, content: m.content }));
       history[0] = { role: "user", content: context + "\n\nTrader's question: " + nextMsgs[0].content };
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: history }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message);
-      const answer = (data.content || []).map((b) => (b.type === "text" ? b.text : "")).filter(Boolean).join("\n");
+      const answer = await callClaudeHistory(history);
       setMsgs((m) => [...m, { role: "assistant", content: answer }]);
     } catch (err) {
-      setMsgs((m) => [...m, { role: "assistant", content: "Couldn't answer that right now — try again in a moment." }]);
+      setMsgs((m) => [...m, { role: "assistant", content: err instanceof AIUnavailableError ? err.message : "Couldn't answer that right now — try again in a moment." }]);
     }
     setBusy(false);
   };
@@ -745,9 +702,14 @@ Review this trade against THEIR stated strategy and rules. Be direct and specifi
 
 Respond ONLY with JSON, no markdown fences, in this shape:
 {"grade":"A|B|C|D|F","summary":"2-3 sentence direct assessment","ruleCheck":[{"rule":"short rule name","status":"followed|broken|unclear","note":"one line"}],"question":"one reflective question for the trader"}`;
-    const text = await callClaude(prompt);
-    const review = parseJSON(text) || { grade: "?", summary: text.slice(0, 400), ruleCheck: [], question: "" };
-    setTrades((t) => t.map((x) => (x.id === trade.id ? { ...x, review, loading: false } : x)));
+    try {
+      const text = await callClaude(prompt);
+      const review = parseJSON(text) || { grade: "?", summary: text.slice(0, 400), ruleCheck: [], question: "" };
+      setTrades((t) => t.map((x) => (x.id === trade.id ? { ...x, review, loading: false } : x)));
+    } catch (err) {
+      const review = { grade: "—", summary: err.message, ruleCheck: [], question: "" };
+      setTrades((t) => t.map((x) => (x.id === trade.id ? { ...x, review, loading: false } : x)));
+    }
   };
 
   return (
@@ -1035,9 +997,13 @@ WRITING RULES — this trader should NOT need a finance degree to understand a w
 Respond ONLY with JSON, no markdown fences, exactly this shape (BE COMPACT — respect every word limit):
 {"headline":"one plain sentence, max 12 words, the single most important thing about today","read":"2-3 plain sentences: what kind of day this sets up to be and why, zero jargon","events":[{"time":"7:30 AM","name":"event name","impact":"low|medium|high","plain":"what this event actually is, in plain words, max 14 words","usually":"what days like this have historically tended to do to their markets, max 18 words"}],"strategyNote":"2-3 sentences speaking directly to their named strategies: how days like today have historically interacted with the way they enter, in plain words","windows":[{"span":"1:55–2:30 PM ET","why":"why to size down or stand aside, plain words, max 14 words"}]}
 Max 5 events, max 3 windows. If nothing is scheduled, say so in the headline and return empty arrays.`;
-    const text = await callClaude(prompt, true);
-    const parsed = parseJSON(text);
-    setBrief(parsed && parsed.headline ? parsed : { raw: text });
+    try {
+      const text = await callClaude(prompt, true);
+      const parsed = parseJSON(text);
+      setBrief(parsed && parsed.headline ? parsed : { raw: text });
+    } catch (err) {
+      setBrief({ raw: err.message });
+    }
     setLoading(false);
   };
 
@@ -1156,9 +1122,13 @@ From their actual behavior, decode their real strategy. Ground every claim in th
 Respond ONLY with JSON, no markdown fences, exactly this shape (BE COMPACT — respect every word limit):
 {"styleName":"a name for their actual style, max 6 words","tagline":"one honest sentence describing how they really trade, max 20 words","sections":[{"title":"Entries","body":"max 60 words"},{"title":"Exits","body":"max 50 words"},{"title":"Risk habits","body":"max 50 words, use the sizing and re-entry numbers"},{"title":"Where the edge lives","body":"max 50 words, use the hour and day numbers"}],"gaps":[{"say":"what they claim, max 12 words","fills":"what the fills show, max 14 words"}],"rules":["rule to formalize, max 14 words","...","..."]}
 Max 3 gaps, exactly 3 rules.`;
-    const text = await callClaude(prompt);
-    const parsed = parseJSON(text);
-    setBook(parsed && parsed.styleName ? parsed : { raw: text });
+    try {
+      const text = await callClaude(prompt);
+      const parsed = parseJSON(text);
+      setBook(parsed && parsed.styleName ? parsed : { raw: text });
+    } catch (err) {
+      setBook({ raw: err.message });
+    }
     setLoading(false);
   };
 
@@ -1269,6 +1239,24 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: FB }}>
       <style>{FONTS + `@keyframes pulse {0%,100%{opacity:.3}50%{opacity:1}} select option{background:${T.panel}}`}</style>
+
+      {!aiEnabled && (
+        <div
+          style={{
+            background: `${T.amber}14`,
+            borderBottom: `1px solid ${T.amber}44`,
+            color: T.text,
+            padding: "10px 20px",
+            fontSize: 13,
+            lineHeight: 1.5,
+            textAlign: "center",
+          }}
+        >
+          <b style={{ color: T.amber }}>Demo mode.</b> Drop a CSV to try it — import, column mapping and
+          parsing all run in your browser, and nothing is uploaded. The AI review is off here; it needs a
+          backend to hold the API key.
+        </div>
+      )}
 
       {!profile ? (
         <Onboarding onDone={setProfile} />
