@@ -6,7 +6,7 @@ Debrief reads your trade history export (TradingView, Tradovate, or most broker 
 
 Built and beta-tested on real trade data (100+ trade sample sets across futures and forex) while actively trading NQ micros and gold micros.
 
-**[Live demo →]https://claude.ai/public/artifacts/18c5771d-2932-4af3-a28c-a30c33ddfe83**
+**[Live demo →][https://claude.ai/public/artifacts/18c5771d-2932-4af3-a28c-a30c33ddfe83](https://claude.ai/public/artifacts/ec8604c5-a227-4e52-ab2b-b719896d21bf)**
 ---
 
 ## What it does
