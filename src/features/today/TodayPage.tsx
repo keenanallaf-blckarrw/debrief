@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Download, ListChecks, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { summarize } from "../../../shared/analytics/stats";
 import type { DayEvaluation } from "../../../shared/rules/evaluate";
 import { maskAccount } from "../../../shared/trades/roundtrips";
@@ -29,12 +29,33 @@ function verdict(ev: DayEvaluation): string {
   return `${ev.broken} of ${considered} rules broken`;
 }
 
+/** Long values ("+$12,345") get a slightly smaller size so they always fit their box. */
+function fit(text: string): string {
+  if (text.length <= 6) return "text-[18px]";
+  if (text.length <= 8) return "text-[16px]";
+  return "text-[14px]";
+}
+
+function SmallStat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-line-2 bg-panel px-3 py-2.5">
+      <div className="text-[11.5px] text-muted">{label}</div>
+      <div className="whitespace-nowrap font-semibold tracking-[-0.02em]">{children}</div>
+    </div>
+  );
+}
+
 function GradeCard({ ev, rulesCount }: { ev: DayEvaluation; rulesCount: number }) {
   const rules = useStore((s) => s.data.rules);
   const s = summarize(ev.trades);
+  const net = money(s.net, { sign: true });
+  const win = pct(s.winRate);
   return (
-    <Card className="overflow-hidden">
-      <div className="grid gap-6 p-6 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+    // The card lays itself out by its own width: beside the coach on a wide
+    // screen it's narrow, so the checklist moves under the grade instead of
+    // squeezing the stat boxes.
+    <Card className="@container overflow-hidden">
+      <div className="grid gap-6 p-6 @min-[760px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="flex flex-col justify-between gap-6">
           <div className="flex items-center gap-5">
             <Grade grade={ev.grade} className="text-[108px]" />
@@ -45,18 +66,15 @@ function GradeCard({ ev, rulesCount }: { ev: DayEvaluation; rulesCount: number }
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-2xl border border-line-2 bg-panel px-3 py-2.5">
-              <div className="text-[11.5px] text-muted">Net</div>
-              <Money value={s.net} className="text-[18px] font-semibold tracking-[-0.02em]" />
-            </div>
-            <div className="rounded-2xl border border-line-2 bg-panel px-3 py-2.5">
-              <div className="text-[11.5px] text-muted">Trades</div>
-              <div className="text-[18px] font-semibold">{s.trades}</div>
-            </div>
-            <div className="rounded-2xl border border-line-2 bg-panel px-3 py-2.5">
-              <div className="text-[11.5px] text-muted">Win rate</div>
-              <div className="text-[18px] font-semibold">{pct(s.winRate)}</div>
-            </div>
+            <SmallStat label="Net">
+              <Money value={s.net} className={fit(net)} />
+            </SmallStat>
+            <SmallStat label="Trades">
+              <span className={fit(String(s.trades))}>{s.trades}</span>
+            </SmallStat>
+            <SmallStat label="Win rate">
+              <span className={fit(win)}>{win}</span>
+            </SmallStat>
           </div>
           {s.commission > 0 && <div className="-mt-3 text-[11.5px] text-faint">Net after {money(s.commission)} in commissions.</div>}
         </div>

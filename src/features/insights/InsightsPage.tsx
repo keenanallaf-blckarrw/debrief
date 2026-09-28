@@ -1,5 +1,5 @@
 import { Lock, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { PeriodDebrief, StoredDebrief } from "../../../shared/ai/schemas";
 import { analyzeBehavior } from "../../../shared/analytics/behavior";
@@ -24,7 +24,7 @@ import { getData, openImport, openPro, saveDebrief, useStore } from "../../lib/s
 type Period = "7" | "30" | "90" | "all";
 const LABEL: Record<Period, string> = { "7": "Last 7 days", "30": "Last 30 days", "90": "Last 90 days", all: "All time" };
 
-function ProGate({ children, what }: { children: React.ReactNode; what: string }) {
+function ProGate({ children, what }: { children: ReactNode; what: string }) {
   const pro = usePro();
   if (pro) return <>{children}</>;
   return (
@@ -197,7 +197,7 @@ export function InsightsPage() {
           <Stat label="Win rate" value={pct(s.winRate)} note={`${s.wins}W · ${s.losses}L`} help="Winning trades out of all trades that won or lost (breakeven trades don't count)." />
           <Stat label="Profit factor" value={ratio(s.profitFactor)} tone={s.profitFactor !== null && s.profitFactor < 1 ? "loss" : undefined} help="Dollars won ÷ dollars lost. Above 1.0 means your winners pay for your losers." />
           <Stat label="Avg per trade" value={<Money value={s.expectancy} />} help="Net P&L divided by the number of trades: what an average trade is worth to you." />
-          <Stat label="Avg win / loss" value={<span className="text-[18px]"><Money value={s.avgWin} /> <span className="text-faint">/</span> <Money value={s.avgLoss} /></span>} note={s.payoff ? `payoff ${s.payoff.toFixed(2)}×` : undefined} help="Your average winner and average loser. Payoff is how many times bigger the average win is." />
+          <Stat label="Avg win / loss" value={<span className="flex flex-wrap items-baseline gap-x-1.5 text-[18px]"><Money value={s.avgWin} /><span className="text-faint">/</span><Money value={s.avgLoss} /></span>} note={s.payoff ? `payoff ${s.payoff.toFixed(2)}×` : undefined} help="Your average winner and average loser. Payoff is how many times bigger the average win is." />
           <Stat label="Max drawdown" value={money(-s.maxDrawdown)} tone={s.maxDrawdown > 0 ? "loss" : undefined} help="The deepest drop from a high point in your running P&L during this period." />
           <Stat label="Discipline" value={avgScore === null ? "—" : `${avgScore}/100`} note={dayEvals.length ? `${cleanDays} of ${dayEvals.length} days rule-clean` : "Add rules to track"} help="Average of your daily process scores: rules followed ÷ rules checked." />
         </div>
