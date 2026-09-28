@@ -34,7 +34,11 @@ export function TradingViewWidget({ script, config, height, title }: { script: "
     };
   }, [script, key]);
 
-  return <div ref={box} className="overflow-hidden rounded-2xl" style={{ height }} aria-label={title} role="region" />;
+  // colorScheme "normal": Debrief's page is dark, TradingView's widget page is
+  // light. When the two don't match, Chrome paints a solid white backdrop
+  // behind the iframe, which turned the dark-theme calendar into faint grey
+  // text on white. Matching schemes keeps the iframe transparent.
+  return <div ref={box} className="overflow-hidden rounded-2xl" style={{ height, colorScheme: "normal" }} aria-label={title} role="region" />;
 }
 
 /** Free-to-embed stand-ins for futures, for the widget chart. */
