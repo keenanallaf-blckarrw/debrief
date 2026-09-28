@@ -82,7 +82,7 @@ export const companion = {
   inbox: () => call<{ items: InboxItem[] }>("/inbox"),
   inboxContent: (id: string) => call<string>(`/inbox/${encodeURIComponent(id)}/content`),
   inboxDone: (id: string) => call<{ ok: true }>(`/inbox/${encodeURIComponent(id)}/done`, { method: "POST" }),
-  scan: (days = 60) => call<{ dir: string; found: number; items: InboxItem[] }>("/inbox/scan", { method: "POST", body: JSON.stringify({ days }) }),
+  scan: (days = 365) => call<{ dir: string; found: number; items: InboxItem[] }>("/inbox/scan", { method: "POST", body: JSON.stringify({ days }) }),
   saveKey: (key: string) => call<{ ok: boolean; message: string }>("/config/ai-key", { method: "POST", body: JSON.stringify({ key }) }),
   deleteKey: () => call<{ ok: boolean; environmentKeyStillSet: boolean }>("/config/ai-key", { method: "DELETE" }),
   setWatch: (patch: { dir?: string; enabled?: boolean }) =>

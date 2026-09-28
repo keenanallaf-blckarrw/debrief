@@ -27,8 +27,8 @@ export function AutoImport({ compact = false }: { compact?: boolean }) {
     const scan = async () => {
       setBusy(true);
       try {
-        const r = await companion.scan(60);
-        if (!r.items.length) toast(`No new trade exports in ${r.dir} from the last 60 days.`);
+        const r = await companion.scan();
+        if (!r.items.length) toast(`No new trade exports in ${r.dir} from the last year.`);
         else report(await importInbox(r.items), "Nothing new.");
       } catch (e) {
         toast.error((e as Error).message);

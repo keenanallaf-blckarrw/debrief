@@ -16,7 +16,7 @@ Built by [Keenan](https://github.com/keenanallaf-blckarrw) (finance & entreprene
 - **Every export format, no duplicates.** Tradovate Position History, Performance, Orders and Cash History; TradingView order history and notifications log; NinjaTrader and any other broker's CSV (you confirm the columns once). Drop the same file twice, or three reports covering the same fills, and each trade is counted once.
 - **Rules checked by code, not guessed.** Max trades a day, daily loss limit, stop after N losses, cooldown after a loss, trading hours, no trading around big news, max size, no sizing up after a loss, stops, and your own checklist items. Each session gets a grade: rules followed ÷ rules checked ("2 of 6 rules broken" = D).
 - **Account Guard for prop firm evaluations.** Daily loss limit, trailing or static drawdown, profit target and consistency rule, tracked from every closed trade.
-- **Every trade replayed on a TradingView chart.** Real 1-minute candles around each trade (TradingView Lightweight Charts, installed with Debrief), with arrows at every fill.
+- **Every trade replayed on a TradingView chart.** Real 1-minute candles around each trade (TradingView Lightweight Charts, installed with Debrief), with an arrow on the exact price of every fill. One click opens the exact contract (say MNQU2026) on TradingView, in your own account.
 - **Insights that explain your money.** Equity curve, P&L calendar, your edge by hour, weekday and trade number, and plain-English findings like "Rule-breaking trades: -$860. Clean trades: +$1,240."
 - **The AI coach, upgraded.** Session debriefs, week/month debriefs, "Ask your coach", the Playbook decoder, a daily market brief and "What was the market doing?", all on Claude Opus 5.5, with your key kept on your own computer.
 - **Fixed from version 1:** Tradovate's `$(70.00)` losses were counted as wins; Excel-saved files with 2-digit years lost their times; nothing was saved outside the Claude artifact.
@@ -51,8 +51,10 @@ Debrief opens in your browser at **http://localhost:4317**. Leave the Terminal w
 
 Everything except the AI coach works without it: importing, grading, the Account Guard, charts and insights.
 
-1. Go to [console.anthropic.com](https://console.anthropic.com/settings/keys), sign in, and click **Create Key**. Copy the key (it starts with `sk-ant-`).
-2. In Debrief, open **Settings**, paste the key under **AI coach**, and click **Save key**.
+1. Go to [platform.claude.com](https://platform.claude.com/settings/keys), Anthropic's developer console (console.anthropic.com now redirects there), and sign in or create an account.
+2. Under **Billing**, add API credit. A few dollars goes a long way. A Claude Pro or Max subscription doesn't include API credit; the two are billed separately.
+3. Under **API keys**, click **Create Key**, name it `Debrief`, and copy the key (it starts with `sk-ant-`). It's only shown once.
+4. In Debrief, open **Settings**, paste the key under **AI coach**, and click **Save key**.
 
 The key is checked, then saved on your computer only (in Debrief's data folder, readable only by you). It never goes into the browser or into this repository. AI requests are billed to your Anthropic account; one session debrief costs a few cents.
 
@@ -60,7 +62,7 @@ The key is checked, then saved on your computer only (in Debrief's data folder, 
 
 ## Getting your trades in
 
-**Automatic (recommended):** with Debrief running, just export from your platform. The companion picks up any recognized export that lands in your Downloads folder. The first time, click **Scan my Downloads** to import the exports you already have.
+**Automatic (recommended):** with Debrief running, just export from your platform. The companion picks up any recognized export that lands in your Downloads folder. The first time, click **Scan my Downloads** to import the exports you already have from the past year.
 
 **Manual:** click **Import trades** and drop one or more files, or paste CSV rows.
 
@@ -95,7 +97,8 @@ Tip: import the file straight from the download. Opening it in Excel or Numbers 
 
 - **TradingView has no public API for your trade history,** so Debrief reads the exports TradingView and your broker already give you. It uses TradingView's open-source charting library for the charts.
 - **Tradovate's API** needs a live funded account, a $25/month add-on, and isn't available for prop firm or evaluation accounts, which is why Debrief watches your exports instead.
-- **Price candles** come from Yahoo Finance's free chart data (continuous front-month contract). Yahoo keeps 1-minute candles for 30 days, so Debrief saves each trade's candles right after you import it. Fine for your own journal; a commercial launch would need a licensed data feed.
+- **Price candles** come from Yahoo Finance's free chart data (continuous front-month contract). Yahoo keeps 1-minute candles for 30 days and 5-minute candles for 60, so whenever Debrief is open it saves whole days of candles for the days you traded; after that they're on your computer for good. Trades imported more than 30 days late get 5-minute candles. Fine for your own journal; a commercial launch would need a licensed data feed.
+- **TradingView won't show CME futures inside charts embedded on other sites** (a CME licensing rule; your TradingView login or plan doesn't change it). So with the companion running, Debrief draws real futures candles itself, and the **Open in TradingView** buttons take you to the real chart in your own account. The web demo, which has no companion, shows the closest free stand-in (for MNQ, the Nasdaq-100 CFD).
 - **The economic calendar** comes from Forex Factory's free weekly feed, which only shows the current week. Debrief saves each week, so your news history builds up from the day you start.
 - **Account Guard** checks closed trades only; prop firms also count open-trade swings.
 

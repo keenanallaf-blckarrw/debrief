@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Trade } from "../../shared/types";
 import { addDays } from "../../shared/util/time";
 import { dayShort, money, timeOf } from "../lib/format";
-import { C, chartOptions } from "./chartTheme";
+import { C, chartOptions, chartTime } from "./chartTheme";
 
 // Running net P&L. Above breakeven the line and wash are green, below it red:
 // profit and loss are exactly the good/bad the colors mean. The tooltip gives
@@ -35,14 +35,16 @@ function toPoints(trades: Trade[], mode: "trades" | "days", tz: string): Point[]
   for (const t of sorted) {
     run += t.net;
     // The chart needs strictly increasing times; nudge same-second exits apart.
-    let sec = Math.floor(t.exitTime / 1000);
+    let sec: number = chartTime(t.exitTime, tz);
     if (sec <= lastSec) sec = lastSec + 1;
     lastSec = sec;
     pts.push({ time: sec as UTCTimestamp, value: Math.round(run * 100) / 100, label: `${timeOf(t.exitTime, tz)} · ${t.root} ${t.side}` });
   }
   if (pts.length) {
+    // Start from $0 when the first trade opened.
     const first = pts[0].time as number;
-    pts.unshift({ time: (first - 60) as UTCTimestamp, value: 0, label: "Start" });
+    const opened = chartTime(Math.min(...sorted.map((t) => t.entryTime)), tz);
+    pts.unshift({ time: Math.min(opened, first - 1) as UTCTimestamp, value: 0, label: "Start" });
   }
   return pts;
 }
@@ -68,7 +70,7 @@ export function EquityChart({
 
   useEffect(() => {
     if (!box.current) return;
-    const c = createChart(box.current, chartOptions(tz, height));
+    const c = createChart(box.current, chartOptions(height));
     c.applyOptions({ timeScale: { timeVisible: mode === "trades" }, rightPriceScale: { scaleMargins: { top: 0.12, bottom: 0.08 } } });
     const s = c.addSeries(BaselineSeries, {
       baseValue: { type: "price", price: 0 },

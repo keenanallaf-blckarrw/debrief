@@ -146,6 +146,62 @@ export function yahooSymbol(root: string, assetClass: AssetClass): string | null
   return /^[A-Z.]{1,6}$/.test(root) ? root.replace(".", "-") : null;
 }
 
+// TradingView's exchange prefix for each futures root (as its own symbol search
+// lists them), for "Open in TradingView" links. Micros often sit on a *_MINI
+// feed: Micro Gold is COMEX_MINI:MGC, not COMEX:MGC. Roots not listed open
+// without a prefix and TradingView looks them up itself.
+const TV_EXCHANGE: Record<string, string> = Object.fromEntries(
+  (
+    [
+      ["CME_MINI", ["MNQ", "NQ", "MES", "ES", "M2K", "RTY", "M6E", "M6B", "M6A"]],
+      ["CBOT_MINI", ["MYM", "YM"]],
+      ["COMEX_MINI", ["MGC", "SIL", "MHG"]],
+      ["COMEX", ["GC", "SI", "HG"]],
+      ["NYMEX_MINI", ["QM"]],
+      ["NYMEX", ["MCL", "CL", "NG", "MNG", "PL"]],
+      ["CBOT", ["ZN", "ZB", "ZF", "ZT", "ZC", "ZS", "ZW"]],
+      ["CME", ["6E", "6B", "6J", "6A", "6C", "6S", "BTC", "MBT", "ETH", "MET", "LE", "HE"]],
+    ] as const
+  ).flatMap(([exchange, roots]) => roots.map((r) => [r, exchange])),
+);
+
+/** Contract years come as 6, 26 or 2026. One digit means the nearest year that isn't long gone. */
+function contractYear(y: string, at: number): number {
+  if (y.length >= 4) return Number(y.slice(0, 4));
+  if (y.length >= 2) return 2000 + Number(y.slice(-2));
+  const now = new Date(at).getUTCFullYear();
+  const year = Math.floor(now / 10) * 10 + Number(y);
+  return year < now - 1 ? year + 10 : year;
+}
+
+/**
+ * The symbol TradingView uses for what you traded: the exact contract when the
+ * export names one ("MNQU6" → "CME_MINI:MNQU2026"), otherwise the front month
+ * ("MNQ" → "CME_MINI:MNQ1!"). `at` is when you traded, to read one-digit years.
+ */
+export function tradingViewSymbol(raw: string, at = Date.now()): string {
+  const s = String(raw ?? "").trim().toUpperCase();
+  if (s.includes(":")) return s;
+  const info = parseSymbol(s);
+  if (info.assetClass === "future") {
+    const prefix = TV_EXCHANGE[info.root] ? `${TV_EXCHANGE[info.root]}:` : "";
+    const m = s.replace(/\s+/g, "").match(FUTURE_WITH_MONTH);
+    if (m && m[1] === info.root) return `${prefix}${info.root}${m[2]}${contractYear(m[3], at)}`;
+    return `${prefix}${info.root}1!`;
+  }
+  if (info.assetClass === "forex") return info.root.startsWith("XA") ? `OANDA:${info.root}` : `FX:${info.root}`;
+  if (info.assetClass === "crypto") {
+    const m = info.root.match(/^([A-Z]{2,5})(USDT|USDC|USD|EUR|BTC)/);
+    return m ? `COINBASE:${m[1]}USD` : info.root;
+  }
+  return info.root;
+}
+
+/** A TradingView chart link (1-minute candles) that opens in your own TradingView account. */
+export function tradingViewUrl(raw: string, at?: number): string {
+  return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tradingViewSymbol(raw, at))}&interval=1`;
+}
+
 export function newsCurrenciesFor(root: string, assetClass: AssetClass): string[] {
   if (assetClass === "future") return FUTURES[root]?.newsCurrencies ?? ["USD"];
   if (assetClass === "forex") return [root.slice(0, 3), root.slice(3, 6)].map((c) => (c === "XAU" || c === "XAG" ? "USD" : c));

@@ -7,8 +7,8 @@ import { paths, writeFileAtomic } from "./config";
 
 // Price candles for the chart around each trade, from Yahoo Finance's free
 // chart endpoint (the same data behind finance.yahoo.com). Yahoo keeps 1-minute
-// candles for 30 days and 5-minute candles for 60, so Debrief saves each trade's
-// candles to disk the first time it fetches them; they stay available forever.
+// candles for 30 days and 5-minute candles for 60, so Debrief saves whole days
+// of them to disk for the days you traded; they stay available forever.
 // Free data is for personal use; a commercial launch needs a licensed feed.
 
 export type Interval = "1m" | "5m" | "60m" | "1d";
@@ -28,6 +28,8 @@ export interface CandleResult {
   to: number;
   bars: Candle[];
   cached: boolean;
+  /** Served from whole saved days, which stay on disk for good. */
+  saved: boolean;
 }
 
 export class CandleError extends Error {
@@ -88,32 +90,56 @@ export function parseYahoo(json: YahooChart): Candle[] {
 
 type Fetch = typeof fetch;
 
-export async function getCandles(req: CandleRequest, fetchImpl: Fetch = fetch, now = Date.now()): Promise<CandleResult> {
-  const info = parseSymbol(req.symbol);
-  const ySymbol = yahooSymbol(info.root, info.assetClass);
-  if (!ySymbol) throw new CandleError(`No free price data source for ${req.symbol}.`, 404);
-  const interval = req.interval ?? pickInterval(req.entry, now);
-  const { from, to } = windowFor(req.entry, req.exit, interval);
-  const key = `${ySymbol}|${interval}|${from}|${to}`;
-  const cacheFile = join(paths.candles, `${hash(key)}.json`);
-  // A window that ended a few minutes ago won't change again, so it's saved to
-  // disk for good. Windows still running (today's session, the live chart) are
-  // only kept in memory for a minute.
-  const settled = to <= now - 5 * 60_000;
+// Candles for 1-minute and 5-minute charts are saved one UTC day at a time,
+// while Yahoo still has them. A trade's chart then uses the finest size saved
+// for its days, even after Yahoo has dropped that size.
+const SAVED: Interval[] = ["1m", "5m"];
+/** Most days of candles to ask Yahoo for at once (it caps 1-minute requests at about a week). */
+const MAX_SPAN: Partial<Record<Interval, number>> = { "1m": 7 * DAY, "5m": 30 * DAY };
+/** A window or day this long past won't change again. */
+const SETTLE_MS = 5 * 60_000;
 
-  if (settled && existsSync(cacheFile)) {
-    try {
-      const saved = JSON.parse(readFileSync(cacheFile, "utf8")) as { fetchedAt: number; bars: Candle[] };
-      return { provider: "yahoo", yahooSymbol: ySymbol, interval, from, to, bars: saved.bars, cached: true };
-    } catch {
-      // unreadable cache file: fetch again
-    }
-  }
-  const recent = memory.get(key);
-  if (recent && now - recent.fetchedAt < 60_000) {
-    return { provider: "yahoo", yahooSymbol: ySymbol, interval, from, to, bars: recent.bars, cached: true };
-  }
+function utcDay(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
 
+function dayStart(day: string): number {
+  return Date.parse(`${day}T00:00:00Z`);
+}
+
+/** The UTC days a window touches. */
+export function daysCovering(from: number, to: number): string[] {
+  const days: string[] = [];
+  for (let t = dayStart(utcDay(from)); t < to; t += DAY) days.push(utcDay(t));
+  return days;
+}
+
+function dayFile(ySymbol: string, interval: Interval, day: string): string {
+  return join(paths.candles, `${ySymbol.replace(/[^A-Za-z0-9]/g, "_")}-${interval}-${day}.json`);
+}
+
+function readDay(ySymbol: string, interval: Interval, day: string): Candle[] | null {
+  const file = dayFile(ySymbol, interval, day);
+  if (!existsSync(file)) return null;
+  try {
+    return (JSON.parse(readFileSync(file, "utf8")) as { bars: Candle[] }).bars;
+  } catch {
+    return null;
+  }
+}
+
+/** Saved candles for a window, or null unless every day it touches is saved at this size. */
+function savedWindow(ySymbol: string, interval: Interval, from: number, to: number): Candle[] | null {
+  const bars: Candle[] = [];
+  for (const day of daysCovering(from, to)) {
+    const saved = readDay(ySymbol, interval, day);
+    if (!saved) return null;
+    bars.push(...saved);
+  }
+  return bars.filter((b) => b.time * 1000 >= from && b.time * 1000 < to);
+}
+
+async function fetchYahoo(ySymbol: string, interval: Interval, from: number, to: number, fetchImpl: Fetch): Promise<Candle[]> {
   const url =
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ySymbol)}` +
     `?period1=${Math.floor(from / 1000)}&period2=${Math.floor(to / 1000)}&interval=${interval}&includePrePost=true`;
@@ -129,18 +155,100 @@ export async function getCandles(req: CandleRequest, fetchImpl: Fetch = fetch, n
     const why = json.chart?.error?.description ?? `HTTP ${res.status}`;
     throw new CandleError(`Yahoo Finance has no ${interval} data for this window (${why}).`, 404);
   }
-  const bars = parseYahoo(json);
+  return parseYahoo(json);
+}
+
+/** Fetch and save whole days (ones that are over and not saved yet) at this size. */
+async function saveDays(ySymbol: string, interval: Interval, days: string[], fetchImpl: Fetch, now: number): Promise<void> {
+  const missing = days.filter((d) => dayStart(d) + DAY <= now - SETTLE_MS && !readDay(ySymbol, interval, d));
+  const span = MAX_SPAN[interval] ?? DAY;
+  let i = 0;
+  while (i < missing.length) {
+    // Neighbouring days go in one request, up to Yahoo's limit.
+    let j = i;
+    while (j + 1 < missing.length && dayStart(missing[j + 1]) === dayStart(missing[j]) + DAY && dayStart(missing[j + 1]) + DAY - dayStart(missing[i]) <= span) j++;
+    const bars = await fetchYahoo(ySymbol, interval, dayStart(missing[i]), dayStart(missing[j]) + DAY, fetchImpl);
+    for (let k = i; k <= j; k++) {
+      const start = dayStart(missing[k]) / 1000;
+      const dayBars = bars.filter((b) => b.time >= start && b.time < start + DAY / 1000);
+      writeFileAtomic(dayFile(ySymbol, interval, missing[k]), JSON.stringify({ fetchedAt: now, bars: dayBars }));
+    }
+    i = j + 1;
+  }
+}
+
+export async function getCandles(req: CandleRequest, fetchImpl: Fetch = fetch, now = Date.now()): Promise<CandleResult> {
+  const info = parseSymbol(req.symbol);
+  const ySymbol = yahooSymbol(info.root, info.assetClass);
+  if (!ySymbol) throw new CandleError(`No free price data source for ${req.symbol}.`, 404);
+  const result = (interval: Interval, from: number, to: number, bars: Candle[], cached: boolean, saved: boolean): CandleResult => ({
+    provider: "yahoo",
+    yahooSymbol: ySymbol,
+    interval,
+    from,
+    to,
+    bars,
+    cached,
+    saved,
+  });
+
+  // 1. The finest candles already saved for this trade's days.
+  if (!req.interval) {
+    for (const interval of SAVED) {
+      const w = windowFor(req.entry, req.exit, interval);
+      const bars = savedWindow(ySymbol, interval, w.from, w.to);
+      if (bars?.length) return result(interval, w.from, w.to, bars, true, true);
+    }
+  }
+
+  const interval = req.interval ?? pickInterval(req.entry, now);
+  const { from, to } = windowFor(req.entry, req.exit, interval);
+
+  // 2. Days that are over, at a size Yahoo still has: save the whole days, then
+  //    serve from them. If that fails (say a day starts just past Yahoo's
+  //    30-day limit), fall back to fetching only this window.
+  const days = daysCovering(from, to);
+  if (SAVED.includes(interval) && days.every((d) => dayStart(d) + DAY <= now - SETTLE_MS)) {
+    try {
+      await saveDays(ySymbol, interval, days, fetchImpl, now);
+      const bars = savedWindow(ySymbol, interval, from, to);
+      if (bars?.length) return result(interval, from, to, bars, false, true);
+    } catch (err) {
+      if (err instanceof CandleError && err.status === 429) throw err;
+    }
+  }
+
+  // 3. Everything else: today's session and the live chart (kept a minute in
+  //    memory), and hourly or daily candles for older trades (saved per window).
+  const key = `${ySymbol}|${interval}|${from}|${to}`;
+  const cacheFile = join(paths.candles, `${hash(key)}.json`);
+  const settled = to <= now - SETTLE_MS;
+  if (settled && existsSync(cacheFile)) {
+    try {
+      const saved = JSON.parse(readFileSync(cacheFile, "utf8")) as { fetchedAt: number; bars: Candle[] };
+      return result(interval, from, to, saved.bars, true, false);
+    } catch {
+      // unreadable cache file: fetch again
+    }
+  }
+  const recent = memory.get(key);
+  if (recent && now - recent.fetchedAt < 60_000) return result(interval, from, to, recent.bars, true, false);
+
+  const bars = await fetchYahoo(ySymbol, interval, from, to, fetchImpl);
   if (bars.length && settled) writeFileAtomic(cacheFile, JSON.stringify({ fetchedAt: now, bars }));
   else if (bars.length) {
     memory.set(key, { fetchedAt: now, bars });
     if (memory.size > 200) memory.delete(memory.keys().next().value!);
   }
-  return { provider: "yahoo", yahooSymbol: ySymbol, interval, from, to, bars, cached: false };
+  return result(interval, from, to, bars, false, false);
 }
 
 const memory = new Map<string, { fetchedAt: number; bars: Candle[] }>();
 
-/** Save candles for recent trades in the background, gently, one at a time. */
+/**
+ * Saves candles for recent trades in the background, gently, one request at a
+ * time: 1-minute while Yahoo has them (30 days), else 5-minute (60 days).
+ */
 export class Prefetcher {
   private queue: CandleRequest[] = [];
   private running = false;
@@ -152,7 +260,7 @@ export class Prefetcher {
     let added = 0;
     for (const r of reqs) {
       const key = `${r.symbol}|${r.entry}|${r.exit}`;
-      if (this.done.has(key) || pickInterval(r.entry) !== "1m") continue;
+      if (this.done.has(key) || !SAVED.includes(pickInterval(r.entry))) continue;
       this.done.add(key);
       this.queue.push(r);
       added++;
@@ -171,7 +279,10 @@ export class Prefetcher {
     while (this.queue.length) {
       const next = this.queue.shift()!;
       try {
-        await getCandles(next, this.fetchImpl);
+        // A trade from today can't be saved until its day is over; forget it
+        // so the next prefetch (Debrief asks every time it opens) tries again.
+        const r = await getCandles(next, this.fetchImpl);
+        if (!r.saved) this.done.delete(`${next.symbol}|${next.entry}|${next.exit}`);
       } catch (err) {
         if (err instanceof CandleError && err.status === 429) {
           this.queue.unshift(next);

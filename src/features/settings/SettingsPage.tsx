@@ -191,9 +191,10 @@ function Companion() {
             <div className="mt-2">
               <ol className="list-decimal space-y-1 pl-5 text-[12.5px] leading-relaxed text-muted">
                 <li>
-                  Go to <a className="text-amber hover:underline" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">console.anthropic.com</a>, sign in, and click Create Key.
+                  Go to <a className="text-amber hover:underline" href="https://platform.claude.com/settings/keys" target="_blank" rel="noreferrer">platform.claude.com</a> (Anthropic's developer console) and sign in or create an account.
                 </li>
-                <li>Copy the key (it starts with sk-ant-) and paste it here.</li>
+                <li>Under Billing, add a few dollars of API credit. A Claude Pro or Max subscription doesn't include API credit.</li>
+                <li>Under API keys, click Create Key, name it Debrief, then copy the key (it starts with sk-ant-) and paste it here.</li>
               </ol>
               <form className="mt-3 flex max-w-xl gap-2" onSubmit={(e) => { e.preventDefault(); void saveKey(); }}>
                 <input type="password" className="field font-mono text-[12.5px]" placeholder="sk-ant-…" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" aria-label="Anthropic API key" />

@@ -3,6 +3,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { summarize } from "../../../shared/analytics/stats";
 import type { DayEvaluation } from "../../../shared/rules/evaluate";
 import { maskAccount } from "../../../shared/trades/roundtrips";
+import { tradingDay } from "../../../shared/util/time";
 import type { Trade } from "../../../shared/types";
 import { EquityChart } from "../../charts/EquityChart";
 import { Button } from "../../components/ui/Button";
@@ -135,6 +136,10 @@ export function TodayPage({ day }: { day?: string }) {
   const idx = current ? days.indexOf(current) : -1;
   const evs = current ? derived.dayEvaluations(current) : [];
   const enabledRules = rules.filter((r) => r.enabled).length;
+  // Evening futures trades count toward the next day's session, like Tradovate's
+  // "Trade Date". Say so, or Sunday-evening trades look misfiled under Monday.
+  const firstEntry = Math.min(...evs.flatMap((ev) => ev.trades.map((t) => t.entryTime)));
+  const eveningBefore = current && Number.isFinite(firstEntry) && tradingDay(firstEntry, tz, "midnight") < current ? tradingDay(firstEntry, tz, "midnight") : null;
 
   const coachNotes = useMemo(() => {
     const m = new Map<string, string>();
@@ -173,6 +178,11 @@ export function TodayPage({ day }: { day?: string }) {
         <div>
           <div className="label">Session debrief</div>
           <h1 className="mt-1 text-[28px] font-bold tracking-[-0.025em]">{dayLong(current)}</h1>
+          {eveningBefore && (
+            <p className="mt-1 text-[12.5px] text-muted">
+              Includes your trades from {dayLong(eveningBefore).split(",")[0]} evening. Futures sessions start at 6 PM New York time the day before, the same trading day Tradovate reports.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <Button size="sm" variant="ghost" aria-label="Earlier session" disabled={idx >= days.length - 1} onClick={() => navigate(`/day/${days[idx + 1]}`)} icon={<ChevronLeft className="size-4" />} />

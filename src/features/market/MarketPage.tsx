@@ -14,6 +14,7 @@ import { useDerived } from "../../lib/derived";
 import { dayShort, duration, timeOf, tzShort } from "../../lib/format";
 import { addNews, getData, useStore } from "../../lib/store";
 import { LiveChart } from "../../charts/LiveChart";
+import { TradingViewLink } from "../../charts/TradingViewLink";
 import { TradingViewWidget, widgetSymbol } from "./TradingViewWidget";
 
 function useNow(ms = 30_000) {
@@ -233,7 +234,11 @@ export function MarketPage() {
           <Card>
             <CardHeader
               title={`Live chart · ${chartRoot}`}
-              subtitle={available ? "Today's 1-minute futures candles for the market you trade most." : `TradingView's live chart of ${proxy.note}, the closest free stand-in for ${chartRoot} futures.`}
+              subtitle={
+                available
+                  ? `Today's 1-minute ${chartRoot} futures candles, the market you trade most.`
+                  : `TradingView doesn't allow CME futures in charts embedded on other sites. This is the closest free stand-in: ${proxy.note} (${proxy.symbol}), which trades at a slightly different price than ${chartRoot} futures. Run Debrief on your computer for real ${chartRoot} futures candles, or open the real chart on TradingView.`
+              }
               action={
                 roots.length > 1 ? (
                   <select className="field !h-8 !w-auto !py-0 text-[12.5px]" value={chartRoot} onChange={(e) => setRoot(e.target.value)} aria-label="Chart symbol">
@@ -257,6 +262,9 @@ export function MarketPage() {
                   config={{ symbol: proxy.symbol, interval: "5", timezone: tz, theme: "dark", style: "1", locale: "en", backgroundColor: "rgba(11, 11, 12, 1)", gridColor: "rgba(255, 255, 255, 0.04)", allow_symbol_change: true, hide_side_toolbar: true, support_host: "https://www.tradingview.com" }}
                 />
               )}
+              <div className="flex justify-end px-1 pt-3">
+                <TradingViewLink symbol={chartRoot} />
+              </div>
             </div>
           </Card>
         </div>

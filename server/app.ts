@@ -71,7 +71,7 @@ export function createApp(s: Services) {
 
   app.post("/api/inbox/scan", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as { days?: number };
-    const days = Math.min(365, Math.max(1, Number(body.days) || 60));
+    const days = Math.min(365, Math.max(1, Number(body.days) || 365));
     const cfg = loadConfig();
     const found = s.inbox.scan(cfg.watchDir, days);
     return c.json({ dir: cfg.watchDir, found: found.length, items: s.inbox.pending() });

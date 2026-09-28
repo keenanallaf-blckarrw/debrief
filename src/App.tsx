@@ -14,6 +14,7 @@ import { SettingsPage } from "./features/settings/SettingsPage";
 import { TodayPage } from "./features/today/TodayPage";
 import { TradesPage } from "./features/trades/TradesPage";
 import { companion, useCompanion, watchCompanion } from "./lib/companion";
+import { derive } from "./lib/derived";
 import { restoreFolder } from "./lib/folderWatch";
 import { importInboxItem, importPending, type ImportReport } from "./lib/importer";
 import { flushSave } from "./lib/persist";
@@ -87,6 +88,23 @@ function useCompanionSync() {
     }
     return () => clearInterval(t);
   }, [available, hydrated, onboarded]);
+
+  // Save price charts while Yahoo still has the fine candles (1-minute for 30
+  // days, 5-minute for 60). The companion skips days it already saved, so
+  // asking each time Debrief opens, and after each import, is cheap.
+  const executions = useStore((s) => s.data.executions);
+  const prefetchOn = useStore((s) => s.data.settings.prefetchCharts);
+  useEffect(() => {
+    if (!available || !hydrated || !prefetchOn) return;
+    const t = setTimeout(() => {
+      const since = Date.now() - 59 * 86_400_000;
+      const recent = derive(getData())
+        .allTrades.filter((tr) => tr.entryTime > since)
+        .map((tr) => ({ symbol: tr.symbol, entry: tr.entryTime, exit: tr.exitTime }));
+      if (recent.length) void companion.prefetch(recent.slice(-500)).catch(() => undefined);
+    }, 3_000);
+    return () => clearTimeout(t);
+  }, [available, hydrated, prefetchOn, executions]);
 
   // Keep a daily backup file on your computer (companion only).
   useEffect(() => {

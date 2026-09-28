@@ -12,7 +12,7 @@ delete process.env.ANTHROPIC_API_KEY;
 const { createApp } = await import("../server/app");
 const { ensureDirs } = await import("../server/config");
 const { Inbox, classifyFile } = await import("../server/watcher");
-const { Prefetcher, parseYahoo, pickInterval, windowFor, getCandles } = await import("../server/marketData");
+const { Prefetcher, parseYahoo, pickInterval, windowFor, getCandles, daysCovering } = await import("../server/marketData");
 const { setClientForTests } = await import("../server/ai");
 
 ensureDirs();
@@ -28,8 +28,25 @@ const yahooJson = {
     error: null,
   },
 };
+const STEP: Record<string, number> = { "1m": 60, "5m": 300, "60m": 3600, "1d": 86400 };
+/** Yahoo's chart API, faked: a candle every interval across the requested range. */
+function yahooRange(url: string): Response {
+  const q = new URL(url).searchParams;
+  const from = Number(q.get("period1"));
+  const to = Number(q.get("period2"));
+  const step = STEP[q.get("interval") ?? "1m"];
+  const timestamp: number[] = [];
+  for (let t = Math.ceil(from / step) * step; t < to; t += step) timestamp.push(t);
+  const px = timestamp.map((t) => 20000 + (t % 7200) / 60);
+  const quote = { open: px, high: px.map((p) => p + 2), low: px.map((p) => p - 2), close: px, volume: px.map(() => 10) };
+  return new Response(JSON.stringify({ chart: { result: [{ timestamp, indicators: { quote: [quote] } }], error: null } }), { status: 200 });
+}
+const yahooCalls: string[] = [];
 const fakeFetch = (async (url: string) => {
-  if (String(url).includes("yahoo")) return new Response(JSON.stringify(yahooJson), { status: 200 });
+  if (String(url).includes("yahoo")) {
+    yahooCalls.push(String(url));
+    return yahooRange(String(url));
+  }
   if (String(url).includes("faireconomy"))
     return new Response(JSON.stringify([{ title: "CPI m/m", country: "USD", date: "2026-09-10T08:30:00-04:00", impact: "High" }]), { status: 200 });
   return new Response("{}", { status: 404 });
@@ -155,14 +172,52 @@ describe("price candles", () => {
     expect(parseYahoo(yahooJson)).toHaveLength(2);
   });
 
-  it("serves candles for a trade and caches settled windows", async () => {
-    const entry = Date.now() - 2 * 86_400_000;
-    const res = await req(`/api/candles?symbol=MNQU6&entry=${entry}&exit=${entry + 60_000}`);
-    const json = (await res.json()) as { yahooSymbol: string; interval: string; bars: unknown[]; cached: boolean };
-    expect(json).toMatchObject({ yahooSymbol: "MNQ=F", interval: "1m", cached: false });
-    expect(json.bars).toHaveLength(2);
-    const again = await getCandles({ symbol: "MNQU6", entry, exit: entry + 60_000 }, fakeFetch);
-    expect(again.cached).toBe(true);
+  it("serves candles for a trade and saves the whole days it touches", async () => {
+    const entry = Date.UTC(2026, 8, 20, 14, 30) + 17; // a Sunday afternoon, UTC
+    const now = entry + 3 * 86_400_000;
+    const first = await getCandles({ symbol: "MNQU6", entry, exit: entry + 60_000 }, fakeFetch, now);
+    expect(first).toMatchObject({ yahooSymbol: "MNQ=F", interval: "1m", cached: false, saved: true });
+    // The chart window: 45 minutes either side, every minute.
+    expect(first.bars.length).toBeGreaterThanOrEqual(90);
+    expect(first.bars.every((b) => b.time * 1000 >= first.from && b.time * 1000 < first.to)).toBe(true);
+    const calls = yahooCalls.length;
+    const again = await getCandles({ symbol: "MNQU6", entry: entry + 600_000, exit: entry + 900_000 }, fakeFetch, now);
+    expect(again).toMatchObject({ cached: true, saved: true });
+    expect(yahooCalls.length).toBe(calls);
+  });
+
+  it("keeps showing 1-minute candles after Yahoo has dropped them", async () => {
+    const entry = Date.UTC(2026, 8, 2, 14, 12, 5);
+    await getCandles({ symbol: "MNQU6", entry, exit: entry + 170_000 }, fakeFetch, entry + 27 * 86_400_000);
+    // A month later Yahoo only has 5-minute candles for that day.
+    const noFetch = (async () => {
+      throw new Error("should not fetch");
+    }) as unknown as typeof fetch;
+    const later = await getCandles({ symbol: "MNQU6", entry, exit: entry + 170_000 }, noFetch, entry + 45 * 86_400_000);
+    expect(later).toMatchObject({ interval: "1m", saved: true });
+  });
+
+  it("fetches neighbouring days in one request", async () => {
+    const entry = Date.UTC(2026, 8, 9, 23, 50); // spans midnight UTC
+    const before = yahooCalls.length;
+    const r = await getCandles({ symbol: "MGCZ6", entry, exit: entry + 20 * 60_000 }, fakeFetch, entry + 5 * 86_400_000);
+    expect(daysCovering(r.from, r.to)).toEqual(["2026-09-09", "2026-09-10"]);
+    expect(yahooCalls.length - before).toBe(1);
+    expect(r.saved).toBe(true);
+  });
+
+  it("doesn't save a day that isn't over yet", async () => {
+    const now = Date.UTC(2026, 8, 28, 20, 0);
+    const r = await getCandles({ symbol: "MESZ6", entry: now - 3_600_000, exit: now - 3_000_000 }, fakeFetch, now);
+    expect(r).toMatchObject({ interval: "1m", saved: false });
+  });
+
+  it("queues trades for saving while Yahoo still has 1- or 5-minute candles", () => {
+    const p = new Prefetcher((async () => new Response("{}", { status: 500 })) as unknown as typeof fetch, 0);
+    const now = Date.now();
+    expect(p.add([{ symbol: "MNQU6", entry: now - 3 * 86_400_000, exit: now - 3 * 86_400_000 + 60_000 }])).toBe(1);
+    expect(p.add([{ symbol: "MNQU6", entry: now - 45 * 86_400_000, exit: now - 45 * 86_400_000 + 60_000 }])).toBe(1);
+    expect(p.add([{ symbol: "MNQU6", entry: now - 200 * 86_400_000, exit: now - 200 * 86_400_000 + 60_000 }])).toBe(0);
   });
 });
 

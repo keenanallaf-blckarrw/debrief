@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import type { Trade } from "../../../shared/types";
 import { maskAccount } from "../../../shared/trades/roundtrips";
+import { tradingDay } from "../../../shared/util/time";
 import { TradeChart } from "../../charts/TradeChart";
 import { Badge, Chip, Money } from "../../components/ui/Bits";
 import { Drawer } from "../../components/ui/Dialog";
 import { useDerived } from "../../lib/derived";
-import { dayLong, duration, money, price, timeOf } from "../../lib/format";
+import { dayLong, dayShort, duration, money, price, timeOf } from "../../lib/format";
 import { markTradeRule, setTradeNote, useStore } from "../../lib/store";
 
 // One trade, up close: replay on the chart, what the rule engine flagged, and
@@ -85,6 +86,17 @@ export function TradeDrawer({ trade, onClose }: { trade: Trade | null; onClose: 
 
   if (!trade) return null;
   const violations = evaluation.byTrade.get(trade.key) ?? [];
+  // The calendar dates you actually traded on. An evening futures trade counts
+  // toward the next day's session (as Tradovate reports it), so say both.
+  const opened = tradingDay(trade.entryTime, tz, "midnight");
+  const closed = tradingDay(trade.exitTime, tz, "midnight");
+  const when = [
+    `${dayLong(opened)} · ${timeOf(trade.entryTime, tz, true)} → ${closed !== opened ? `${dayShort(closed)}, ` : ""}${timeOf(trade.exitTime, tz, true)}`,
+    opened !== trade.day ? `part of the ${dayShort(trade.day)} session` : "",
+    trade.account ? `account ${maskAccount(trade.account)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const tradeRules = rules.filter((r) => r.enabled && r.kind === "manual" && r.params.scope === "trade");
 
   return (
@@ -97,7 +109,7 @@ export function TradeDrawer({ trade, onClose }: { trade: Trade | null; onClose: 
           <Money value={trade.net} className="text-[17px]" />
         </span>
       }
-      description={`${dayLong(trade.day)} · ${timeOf(trade.entryTime, tz, true)} → ${timeOf(trade.exitTime, tz, true)}${trade.account ? ` · account ${maskAccount(trade.account)}` : ""}`}
+      description={when}
     >
       <TradeChart trade={trade} tz={tz} />
 

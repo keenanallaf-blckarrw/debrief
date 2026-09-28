@@ -102,7 +102,7 @@ export function Onboarding() {
   const scanDownloads = async () => {
     setScan({ busy: true, found: null });
     try {
-      const r = await companion.scan(60);
+      const r = await companion.scan();
       setScan({ busy: false, found: r.items.length, dir: r.dir });
       if (r.items.length) await importInbox(r.items);
     } catch (e) {
@@ -269,13 +269,13 @@ export function Onboarding() {
                   <div className="min-w-0">
                     <div className="text-[15px] font-semibold">Find the exports you already downloaded</div>
                     <p className="mt-1 text-[13px] leading-relaxed text-muted">
-                      The Debrief companion is running. It can look in <span className="font-mono text-ink-2">{status.watch.dir}</span> for Tradovate and TradingView exports from the last 60 days and import them all at once. After that, every new export imports itself.
+                      The Debrief companion is running. It can look in <span className="font-mono text-ink-2">{status.watch.dir}</span> for Tradovate and TradingView exports from the past year and import them all at once. After that, every new export imports itself.
                     </p>
                     <Button className="mt-3" variant="primary" loading={scan.busy} onClick={scanDownloads} icon={<FolderSearch className="size-4" />}>
                       Scan my Downloads
                     </Button>
                     {scan.found !== null && (
-                      <p className="mt-2 text-[12.5px] text-ink-2">{scan.found ? `Found ${plural(scan.found, "export")}.` : "No trade exports found there from the last 60 days."}</p>
+                      <p className="mt-2 text-[12.5px] text-ink-2">{scan.found ? `Found ${plural(scan.found, "export")}.` : "No trade exports found there from the past year."}</p>
                     )}
                   </div>
                 </div>

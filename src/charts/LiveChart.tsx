@@ -4,7 +4,7 @@ import type { Candle } from "../../shared/types";
 import { companion } from "../lib/companion";
 import { price as fmtPrice, timeOf } from "../lib/format";
 import { Spinner } from "../components/ui/Bits";
-import { C, chartOptions } from "./chartTheme";
+import { C, chartCandles, chartOptions } from "./chartTheme";
 
 // Today's 1-minute futures candles for your main market, refreshed every
 // minute through the companion. (TradingView's free embed can't show CME
@@ -18,7 +18,7 @@ export function LiveChart({ symbol, tz, height = 420 }: { symbol: string; tz: st
 
   useEffect(() => {
     if (!box.current) return;
-    const c = createChart(box.current, chartOptions(tz, height));
+    const c = createChart(box.current, chartOptions(height));
     const s = c.addSeries(CandlestickSeries, {
       upColor: C.upCandle,
       downColor: C.downCandle,
@@ -45,9 +45,10 @@ export function LiveChart({ symbol, tz, height = 420 }: { symbol: string; tz: st
       try {
         const r = await companion.candles(symbol, now - 4 * 3_600_000, now);
         if (cancelled || !series.current) return;
-        series.current.setData(r.bars.map((b) => ({ time: b.time as UTCTimestamp, open: b.open, high: b.high, low: b.low, close: b.close })));
-        if (first && r.bars.length) {
-          const lastT = r.bars[r.bars.length - 1].time;
+        const candles = chartCandles(r.bars, tz);
+        series.current.setData(candles.map(({ time, bar: b }) => ({ time, open: b.open, high: b.high, low: b.low, close: b.close })));
+        if (first && candles.length) {
+          const lastT = candles[candles.length - 1].time;
           chart.current?.timeScale().setVisibleRange({ from: (lastT - 3 * 3600) as UTCTimestamp, to: (lastT + 60 * 5) as UTCTimestamp });
           first = false;
         }
@@ -62,7 +63,7 @@ export function LiveChart({ symbol, tz, height = 420 }: { symbol: string; tz: st
       cancelled = true;
       clearInterval(t);
     };
-  }, [symbol]);
+  }, [symbol, tz]);
 
   return (
     <div>

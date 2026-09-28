@@ -28,14 +28,6 @@ function newestDay(parsed: ParsedFile): string | null {
   return days.length ? days.sort().pop()! : null;
 }
 
-function prefetchCharts(parsed: ParsedFile): void {
-  if (!getData().settings.prefetchCharts || !useCompanion.getState().available) return;
-  const recent = parsed.executions
-    .filter((e) => Date.now() - e.entryTime < 29 * 86_400_000)
-    .map((e) => ({ symbol: e.symbol, entry: e.entryTime, exit: e.exitTime }));
-  if (recent.length) void companion.prefetch(recent).catch(() => undefined);
-}
-
 /** Import one already-analyzed file. Returns a report; shows nothing itself. */
 export function commitAnalysis(a: FileAnalysis, via: ImportMeta["via"]): ImportReport {
   const parsed = a.parsed;
@@ -44,7 +36,6 @@ export function commitAnalysis(a: FileAnalysis, via: ImportMeta["via"]): ImportR
     return { fileName: a.fileName, ok: false, message: `${a.fileName}: ${a.detection.label}. ${a.detection.note ?? "Nothing to import."}` };
   }
   const outcome = importParsed(parsed, { fileName: a.fileName, via });
-  prefetchCharts(parsed);
   const day = newestDay(parsed);
   if (day) useStore.setState({ lastImportDays: [day] });
   return {

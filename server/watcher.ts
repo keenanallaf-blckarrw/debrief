@@ -124,7 +124,7 @@ export class Inbox {
   }
 
   /** Look through the folder for exports from the last `days` days. */
-  scan(dir: string, days = 60): InboxItem[] {
+  scan(dir: string, days = 365): InboxItem[] {
     const cutoff = Date.now() - days * 86_400_000;
     let names: string[] = [];
     try {
