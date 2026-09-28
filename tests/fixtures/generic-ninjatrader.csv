@@ -1,0 +1,4 @@
+Trade number,Instrument,Account,Strategy,Market pos.,Qty,Entry price,Exit price,Entry time,Exit time,Entry name,Exit name,Profit,Cum. net profit,Commission
+1,MNQ SEP26,Sim101,,Long,5,30130.50,30132.75,8/13/2026 9:54:06 AM,8/13/2026 9:54:19 AM,Entry,Exit,$22.50,$22.50,$0.00
+2,MNQ SEP26,Sim101,,Short,10,30228.00,30227.75,8/13/2026 10:46:14 AM,8/13/2026 10:48:14 AM,Entry,Exit,$5.00,$27.50,$0.00
+3,MNQ SEP26,Sim101,,Short,1,30095.00,30110.00,8/13/2026 3:01:08 PM,8/13/2026 3:03:58 PM,Entry,Exit,($30.00),($2.50),$0.00

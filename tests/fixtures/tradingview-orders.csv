@@ -1,0 +1,6 @@
+Symbol,Side,Type,Qty,Limit Price,Stop Price,Fill Price,Status,Commission,Leverage,Margin,Placing Time,Closing Time,Order ID
+CME_MINI:MNQ1!,Buy,Market,2,,,30 130.50,Filled,0.5,,,2026-08-13 09:54:05,2026-08-13 09:54:06,1001
+CME_MINI:MNQ1!,Sell,Stop,2,,30120.00,,Cancelled,,,,2026-08-13 09:54:06,2026-08-13 09:54:19,1002
+CME_MINI:MNQ1!,Sell,Limit,2,30132.75,,30132.75,Filled,0.5,,,2026-08-13 09:54:06,2026-08-13 09:54:19,1003
+CME_MINI:MNQ1!,Sell,Market,1,,,30150.00,Filled,0.25,,,2026-08-13 11:00:00,2026-08-13 11:00:01,1004
+CME_MINI:MNQ1!,Buy,Market,1,,,30140.00,Filled,0.25,,,2026-08-13 11:05:00,2026-08-13 11:05:02,1005

@@ -1,6 +1,18 @@
 node_modules/
+dist/
+build/
+coverage/
 .DS_Store
 *.log
 .env
-dist/
-build/
+.env.local
+# Your own trade exports never belong in the repo (the repo is public).
+*.private.csv
+private/
+# Companion data, in case DEBRIEF_DATA_DIR ever points at this folder.
+.anthropic-key
+backups/
+calendar/
+cache/
+inbox-state.json
+/config.json

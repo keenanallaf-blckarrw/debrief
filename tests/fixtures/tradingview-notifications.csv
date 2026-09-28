@@ -1,0 +1,9 @@
+Symbol,Time,Title,Text
+MNQU6,2026-08-13 10:14:29,Stop order executed on MNQU6 (700000000011) 0,"Sell 10 at 30,201.75"
+MNQU6,2026-08-13 10:14:00,Stop order modified on MNQU6 (700000000011) 0,"Sell 10 at 30,201.75"
+MNQU6,2026-08-13 10:10:00,Stop order modified on MNQU6 (700000000011) 0,"Sell 10 at 30,165.00"
+MNQU6,2026-08-13 10:09:18,Stop order placed on MNQU6 (700000000011) 0,"Sell 10 at 30,170.00"
+MNQU6,2026-08-13 10:09:17,Market order executed on MNQU6 (700000000010) 0,"Buy 10 at 30,177.25"
+MNQU6,2026-08-13 10:09:17,Market order placed on MNQU6 (700000000010) 0,Buy 10
+MNQU6,2026-08-13 09:54:07,Take Profit order placed on MNQU6 (700000000002) 0,"Sell 5 at 30,132.75"
+MNQU6,2026-08-13 09:54:07,Stop Loss order placed on MNQU6 (700000000003) 0,"Sell 5 at 30,120.00"
