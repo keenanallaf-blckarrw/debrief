@@ -150,6 +150,11 @@ export function hasSample(data: AppData): boolean {
   return data.executions.some((e) => e.format === "sample");
 }
 
+/** True when the loaded sample came from an older version of the tour (a different file name). */
+export function sampleOutdated(data: AppData, currentFileName: string): boolean {
+  return hasSample(data) && data.imports.some((r) => r.format === "sample" && r.fileName !== currentFileName);
+}
+
 export function removeSample(data: AppData): AppData {
   const ids = new Set(data.imports.filter((r) => r.format === "sample").map((r) => r.id));
   return {

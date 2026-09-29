@@ -4,11 +4,11 @@ import { analyzeFile, analyzeTable, hasContent, type FileAnalysis } from "../../
 import { emptyParsed, type ColumnMapping, type ParsedFile } from "../../shared/import/types";
 import { parseSymbol, pointValue } from "../../shared/instruments";
 import { generateSampleCsv, SAMPLE_FILE_NAME, sampleNews } from "../../shared/sample";
-import type { ImportMeta } from "../../shared/store/applyImport";
+import { sampleOutdated, type ImportMeta } from "../../shared/store/applyImport";
 import { clean } from "../../shared/util/numbers";
 import { parseStamp, tradingDay } from "../../shared/util/time";
 import { ai, companion, useCompanion, type InboxItem } from "./companion";
-import { addNews, dropMapping, getData, importParsed, queueMapping, useStore, undoImport } from "./store";
+import { addNews, clearSample, dropMapping, getData, importParsed, queueMapping, useStore, undoImport } from "./store";
 import { navigate } from "./router";
 
 // Browser side of importing: read a file, recognize it, add it to the journal,
@@ -291,4 +291,11 @@ export function loadSample(): void {
   const parsed: ParsedFile = { ...a.parsed, detection: { ...a.parsed.detection, format: "sample", label: "Sample journal" }, warnings: [] };
   importParsed(parsed, { fileName: SAMPLE_FILE_NAME, via: "sample" });
   addNews(sampleNews(endDay));
+}
+
+/** Swap a sample loaded from an older version of the tour for the current one. Real trades are never touched. */
+export function refreshOutdatedSample(): void {
+  if (!sampleOutdated(getData(), SAMPLE_FILE_NAME)) return;
+  clearSample();
+  loadSample();
 }

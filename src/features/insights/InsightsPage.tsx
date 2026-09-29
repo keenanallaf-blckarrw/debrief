@@ -16,7 +16,7 @@ import { Stat } from "../../components/ui/Stat";
 import { periodInput } from "../../lib/aiInputs";
 import { ai, useCompanion } from "../../lib/companion";
 import { useDerived } from "../../lib/derived";
-import { dayShort, duration, money, pct, ratio } from "../../lib/format";
+import { dayShort, duration, money, pct, plural, ratio } from "../../lib/format";
 import { usePro } from "../../lib/plan";
 import { navigate } from "../../lib/router";
 import { getData, openImport, openPro, saveDebrief, useStore } from "../../lib/store";
@@ -265,6 +265,12 @@ export function InsightsPage() {
                     <div className="text-[12px] text-faint">{split.broken.trades} trades · {pct(split.broken.winRate)} win rate</div>
                   </div>
                 </div>
+                {split.broken.trades > 0 && split.broken.net < 0 && (
+                  <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+                    Without the {plural(split.broken.trades, "trade")} that broke your rules, you'd be at <Money value={split.clean.net} className="font-semibold" /> instead of{" "}
+                    <Money value={split.clean.net + split.broken.net} className="font-semibold" />.
+                  </p>
+                )}
                 {ruleCounts.length > 0 && (
                   <div className="mt-4">
                     <div className="label mb-2">Most broken</div>

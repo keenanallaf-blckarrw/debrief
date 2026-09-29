@@ -1,7 +1,7 @@
 import { ArrowRight, Check, FolderSearch, RotateCcw, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { makeRule, RULES, ruleLabel } from "../../../shared/rules/catalog";
+import { makeRule, RULES, ruleLabel, starterRules } from "../../../shared/rules/catalog";
 import type { Rule } from "../../../shared/types";
 import { Button } from "../../components/ui/Button";
 import { Chip, Field } from "../../components/ui/Bits";
@@ -21,18 +21,7 @@ interface Starter {
   on: boolean;
 }
 
-function starterSet(): Starter[] {
-  return [
-    { rule: makeRule("maxTradesPerDay", { max: 3 }), on: true },
-    { rule: makeRule("dailyLossLimit", { amount: 500 }), on: true },
-    { rule: makeRule("maxConsecutiveLosses", { max: 2 }), on: true },
-    { rule: makeRule("revengeCooldown", { minutes: 5 }), on: true },
-    { rule: makeRule("maxContracts", { max: 5 }), on: false },
-    { rule: makeRule("tradingWindow"), on: false },
-    { rule: makeRule("newsBuffer", { minutes: 5, minImpact: "high" }), on: false },
-    { rule: makeRule("noSizeUpAfterLoss"), on: false },
-  ];
-}
+const starterSet: () => Starter[] = starterRules;
 
 function Steps({ step }: { step: number }) {
   const names = ["You", "Your rules", "Your account", "Your trades"];

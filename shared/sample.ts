@@ -6,6 +6,10 @@ import { addDays, NEW_YORK, wallToMs, weekdayOf, zonedParts } from "./util/time"
 // revenge re-entries, sizing up after a loss, a trade into CPI). It is written
 // as a Tradovate "Performance" export so it flows through the real importer.
 // Nothing here is real trading data.
+//
+// The tour has to make Debrief's point: this trader's rules work. Trades that
+// follow them have a real edge (more winners, small losses); trades that break
+// them give it back. tests/sample-and-news.test.ts pins that story down.
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -80,75 +84,125 @@ export function sampleDays(endDay: string): string[] {
   return recentWeekdays(endDay, 15);
 }
 
+/** How a trade turns out, in points: a disciplined trade vs. one taken on tilt. */
+const CLEAN = { win: 0.63, winPts: [18, 38], lossPts: [6, 14] } as const;
+const TILT = { win: 0.3, winPts: [6, 16], lossPts: [8, 16] } as const;
+
 export function generateSampleCsv(opts: SampleOptions): string {
-  const rand = mulberry32(opts.seed ?? 20260818);
+  const seed = opts.seed ?? 20260818;
+  const walk = mulberry32(seed);
   const days = sampleDays(opts.endDay);
   const rows: Row[] = [];
   let mnq = 29850;
   let mgc = 4390;
   const snap = (x: number, tick: number) => Math.round(x / tick) * tick;
+  // The evening gold trade before a session counts toward it (CME trading day).
+  let goldBefore: { lost: boolean } | null = null;
 
   days.forEach((day, i) => {
+    // Each day draws from its own random stream, so the story stays the same
+    // whichever weekdays the sample lands on.
+    const rand = mulberry32(seed + (i + 1) * 7919);
+    const between = (range: readonly [number, number]) => range[0] + rand() * (range[1] - range[0]);
     const [y, m, d] = day.split("-").map(Number);
     const at = (h: number, mi: number, s = 0) => wallToMs(NEW_YORK, y, m, d, h, mi, s);
-    mnq += (rand() - 0.48) * 180;
-    mgc += (rand() - 0.5) * 30;
-    // One rough day a week, and the latest session is one too: it's the first
-    // debrief a new user sees, so it should show what Debrief catches.
-    const tiltDay = i % 5 === 3 || i === days.length - 1;
+    mnq += (walk() - 0.48) * 180;
+    mgc += (walk() - 0.5) * 30;
+    const last = i === days.length - 1;
+    const tiltDay = i % 5 === 3;
     const cpiDay = i === days.length - 6;
     const bigLossDay = i === days.length - 4;
 
-    let t = at(9, 36 + Math.floor(rand() * 10), Math.floor(rand() * 60));
     let px = mnq;
-    let size = 5;
-    let lossStreak = 0;
-    const planned = i === days.length - 1 ? 6 : tiltDay ? 7 + Math.floor(rand() * 3) : 2 + Math.floor(rand() * 2);
-
-    if (cpiDay) {
-      // A breakout chase one minute after the 8:30 CPI release.
-      const t0 = at(8, 31, 12);
-      const e = snap(px + 12, MNQ.tick);
-      rows.push({ spec: MNQ, qty: 5, long: true, entry: e, exit: snap(e - 31.5, MNQ.tick), t0, t1: t0 + 94_000 });
-    }
-
-    for (let k = 0; k < planned; k++) {
+    let t = at(9, 36 + Math.floor(rand() * 10), Math.floor(rand() * 60));
+    /** One MNQ trade from time t, `pts` in the trader's favour (negative = a loss). Returns true if it lost. */
+    const trade = (qty: number, pts: number, holdMs: number): boolean => {
       const long = rand() > 0.45;
-      // Early trades are the better ones; tilt makes later ones worse.
-      const edge = k < 2 ? 0.6 : tiltDay ? 0.3 : 0.48;
-      const win = rand() < edge;
-      const hold = win ? 60_000 + rand() * 360_000 : 90_000 + rand() * 720_000;
-      const move = win ? 8 + rand() * 30 : -(6 + rand() * 22);
-      let qty = size;
-      if (bigLossDay && k === 1) qty = 10;
       const entry = snap(px + (rand() - 0.5) * 20, MNQ.tick);
-      const exit = snap(entry + (long ? move : -move), MNQ.tick);
-      rows.push({ spec: MNQ, qty, long, entry, exit, t0: t, t1: t + hold });
+      const exit = snap(entry + (long ? pts : -pts), MNQ.tick);
+      rows.push({ spec: MNQ, qty, long, entry, exit, t0: t, t1: t + holdMs });
       px = exit;
-      if (bigLossDay && k === 1) {
-        rows[rows.length - 1].exit = snap(entry + (long ? -62 : 62), MNQ.tick);
+      t += holdMs;
+      return pts < 0;
+    };
+
+    if (last) {
+      // The first session a new user sees: two clean winners and a small loss,
+      // then the spiral every one of the default rules is there to stop.
+      const script: [qty: number, pts: number, holdSec: number, gapSec: number][] = [
+        [5, 25, 240, 420],
+        [5, 18, 180, 540],
+        [5, -12, 300, 40],
+        [10, -21, 200, 35],
+        [10, -25, 260, 50],
+        [10, 7, 120, 300],
+        [10, -18, 220, 0],
+      ];
+      for (const [qty, pts, hold, gap] of script) {
+        trade(qty, pts, hold * 1000);
+        t += gap * 1000;
       }
-      const lost = (rows[rows.length - 1].exit - entry) * (long ? 1 : -1) < 0;
-      lossStreak = lost ? lossStreak + 1 : 0;
-      // Revenge: after a loss on a rough day, jump back in within a minute, bigger.
-      const gap = tiltDay && lost ? 25_000 + rand() * 50_000 : 4 * 60_000 + rand() * 18 * 60_000;
-      if (tiltDay && lost) size = Math.min(10, size + 5);
-      else if (!lost) size = 5;
-      t = t + hold + gap;
+    } else if (bigLossDay) {
+      // A small loss, a revenge re-entry at double size that runs 45 points
+      // against him, then one more trade to "make it back".
+      trade(5, -10, 200_000);
+      t += 40_000;
+      trade(10, -45, 540_000);
+      t += 60_000;
+      trade(10, 8, 150_000);
+    } else {
+      if (cpiDay) {
+        // A breakout chase one minute after the 8:30 CPI release.
+        const t0 = at(8, 31, 12);
+        const e = snap(px + 12, MNQ.tick);
+        rows.push({ spec: MNQ, qty: 5, long: true, entry: e, exit: snap(e - 31.5, MNQ.tick), t0, t1: t0 + 94_000 });
+      }
+      // Rough days trade on and on; normal days stay within the three-trade
+      // rule, counting an evening gold trade or the CPI trade.
+      const planned = tiltDay ? 6 + Math.floor(rand() * 2) : goldBefore || cpiDay ? 2 : 2 + Math.floor(rand() * 2);
+      let size = 5;
+      let lossStreak = goldBefore?.lost || cpiDay ? 1 : 0;
+      let tilted = false;
+      let tiltNet = 0;
+      for (let k = 0; k < planned; k++) {
+        const odds = tilted ? TILT : CLEAN;
+        // On a rough day, the second trade is the loss that sets it off.
+        const won = tiltDay && k === 1 ? false : rand() < odds.win;
+        const pts = won ? between(odds.winPts) : -between(odds.lossPts);
+        if (tilted) tiltNet += pts * size * MNQ.point;
+        const lost = trade(size, pts, (won ? 60 + rand() * 360 : 90 + rand() * 630) * 1000);
+        lossStreak = lost ? lossStreak + 1 : 0;
+        if (tiltDay) {
+          // Tilt: straight back in after a loss, at double size.
+          if (lost) tilted = true;
+          size = lost ? 10 : 5;
+          t += (lost ? 25 + rand() * 50 : 120 + rand() * 240) * 1000;
+        } else {
+          // Discipline: two losses in a row and he's done for the day.
+          if (lossStreak >= 2) break;
+          t += (6 + rand() * 18) * 60_000;
+        }
+      }
+      if (tiltDay && tiltNet > -200) {
+        // However the tilt went, a rough day ends the way they do: one more
+        // revenge trade at double size that gives back more than it made.
+        trade(10, -Math.max(8, Math.ceil((tiltNet + 200) / (10 * MNQ.point)) + rand() * 4), (150 + rand() * 300) * 1000);
+      }
     }
 
-    // Micro gold in the evening session on some days (counts toward the next trading day).
-    if (i % 3 === 1 && i < days.length - 2) {
-      const e0 = at(19, 5 + Math.floor(rand() * 20), Math.floor(rand() * 60));
-      for (let k = 0; k < 2; k++) {
-        const long = rand() > 0.5;
-        const win = rand() < 0.55;
-        const move = win ? 1.5 + rand() * 4 : -(1 + rand() * 3);
-        const entry = snap(mgc + (rand() - 0.5) * 4, MGC.tick);
-        const exit = snap(entry + (long ? move : -move), MGC.tick);
-        const s0 = e0 + k * (11 * 60_000);
-        rows.push({ spec: MGC, qty: 3, long, entry, exit, t0: s0, t1: s0 + 150_000 + rand() * 300_000 });
-      }
+    // Micro gold in the evening session on some days. It counts toward the next
+    // trading day, and there's no evening session on Fridays.
+    goldBefore = null;
+    const goldWin = rand() < 0.58;
+    const goldPts = goldWin ? 1.5 + rand() * 3.5 : -(1 + rand() * 1.5);
+    const goldLong = rand() > 0.5;
+    const g0 = at(19, 5 + Math.floor(rand() * 20), Math.floor(rand() * 60));
+    const goldHold = 150_000 + rand() * 300_000;
+    if (i % 3 === 1 && i < days.length - 2 && weekdayOf(day) !== 5) {
+      const entry = snap(mgc + (rand() - 0.5) * 4, MGC.tick);
+      const exit = snap(entry + (goldLong ? goldPts : -goldPts), MGC.tick);
+      rows.push({ spec: MGC, qty: 3, long: goldLong, entry, exit, t0: g0, t1: g0 + goldHold });
+      goldBefore = { lost: !goldWin };
     }
   });
 
@@ -204,4 +258,6 @@ export function sampleNews(endDay: string): NewsEvent[] {
   return events;
 }
 
-export const SAMPLE_FILE_NAME = "Sample journal (Debrief tour).csv";
+// Bump the version when the sample's story changes: a sample loaded from an
+// older version is swapped for the new one the next time Debrief opens.
+export const SAMPLE_FILE_NAME = "Sample journal (Debrief tour v2).csv";

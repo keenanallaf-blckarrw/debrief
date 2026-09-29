@@ -16,7 +16,7 @@ import { TradesPage } from "./features/trades/TradesPage";
 import { companion, useCompanion, watchCompanion } from "./lib/companion";
 import { derive } from "./lib/derived";
 import { restoreFolder } from "./lib/folderWatch";
-import { importInboxItem, importPending, type ImportReport } from "./lib/importer";
+import { importInboxItem, importPending, refreshOutdatedSample, type ImportReport } from "./lib/importer";
 import { flushSave } from "./lib/persist";
 import { useRoute } from "./lib/router";
 import { addNews, getData, hydrate, useStore } from "./lib/store";
@@ -132,7 +132,10 @@ export default function App() {
   const onboarded = useStore((s) => s.data.onboarded);
 
   useEffect(() => {
-    void hydrate().then(() => restoreFolder(reportFolder));
+    void hydrate().then(() => {
+      refreshOutdatedSample();
+      return restoreFolder(reportFolder);
+    });
     const onHide = () => flushSave();
     window.addEventListener("pagehide", onHide);
     return () => window.removeEventListener("pagehide", onHide);

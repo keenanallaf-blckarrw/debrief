@@ -171,14 +171,20 @@ export function makeRule<K extends RuleKind>(kind: K, params?: Partial<RuleParam
   } as RuleOf<K>;
 }
 
-/** A sensible starter set most futures traders recognize. */
-export function starterRules(): Rule[] {
+/**
+ * The rules onboarding offers (ones most futures traders recognize) and which
+ * of them start ticked. The sample journal's story is tested against them.
+ */
+export function starterRules(): { rule: Rule; on: boolean }[] {
   return [
-    makeRule("maxTradesPerDay", { max: 4 }),
-    makeRule("dailyLossLimit", { amount: 500 }),
-    makeRule("maxConsecutiveLosses", { max: 2 }),
-    makeRule("revengeCooldown", { minutes: 5 }),
-    makeRule("manual", { scope: "day" }, "Set my daily bias before the open"),
+    { rule: makeRule("maxTradesPerDay", { max: 3 }), on: true },
+    { rule: makeRule("dailyLossLimit", { amount: 500 }), on: true },
+    { rule: makeRule("maxConsecutiveLosses", { max: 2 }), on: true },
+    { rule: makeRule("revengeCooldown", { minutes: 5 }), on: true },
+    { rule: makeRule("maxContracts", { max: 5 }), on: false },
+    { rule: makeRule("tradingWindow"), on: false },
+    { rule: makeRule("newsBuffer", { minutes: 5, minImpact: "high" }), on: false },
+    { rule: makeRule("noSizeUpAfterLoss"), on: false },
   ];
 }
 
